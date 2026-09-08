@@ -109,4 +109,4 @@ src/main/java/com/godoy/billing/
 - [x] Regras de negócio (assinatura, faturamento, pagamento)
 - [x] Tratamento global de exceções
 - [x] Controllers REST
-- [ ] Testes unitários
+- [x] Testes unitários
