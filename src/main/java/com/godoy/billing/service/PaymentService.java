@@ -5,7 +5,7 @@ import com.godoy.billing.domain.entity.Payment;
 import com.godoy.billing.domain.entity.Subscription;
 import com.godoy.billing.domain.enums.InvoiceStatus;
 import com.godoy.billing.domain.enums.SubscriptionStatus;
-import com.godoy.billing.dto.request.PaymentRequest;
+import com.godoy.billing.dto.request.PaymentWebhookRequest;
 import com.godoy.billing.dto.response.PaymentResponse;
 import com.godoy.billing.exception.BusinessException;
 import com.godoy.billing.exception.NotFoundException;
@@ -32,7 +32,7 @@ public class PaymentService {
     private final PaymentMapper paymentMapper;
 
     @Transactional
-    public PaymentResponse confirmPayment(PaymentRequest request) {
+    public PaymentResponse confirmPayment(PaymentWebhookRequest request) {
         Optional<Payment> alreadyProcessed = paymentRepository.findByIdempotencyKey(request.idempotencyKey());
 
         if (alreadyProcessed.isPresent()) {

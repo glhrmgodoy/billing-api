@@ -1,6 +1,6 @@
 package com.godoy.billing.controller;
 
-import com.godoy.billing.dto.request.PaymentRequest;
+import com.godoy.billing.dto.request.PaymentWebhookRequest;
 import com.godoy.billing.dto.response.PaymentResponse;
 import com.godoy.billing.service.PaymentService;
 import jakarta.validation.Valid;
@@ -20,7 +20,7 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/webhook")
-    public ResponseEntity<PaymentResponse> confirmPayment(@Valid @RequestBody PaymentRequest request) {
+    public ResponseEntity<PaymentResponse> confirmPayment(@Valid @RequestBody PaymentWebhookRequest request) {
         PaymentResponse response = paymentService.confirmPayment(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }

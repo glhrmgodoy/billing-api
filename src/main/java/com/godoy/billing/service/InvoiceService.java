@@ -52,7 +52,7 @@ public class InvoiceService {
 
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
-    public void generateInvoiceForDueSubscription() {
+    public void generateInvoicesForDueSubscriptions() {
         LocalDate today = LocalDate.now();
 
         List<Subscription> dueSubscriptions = subscriptionRepository

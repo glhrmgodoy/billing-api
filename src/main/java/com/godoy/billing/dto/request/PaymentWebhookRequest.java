@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-public record PaymentRequest(
+public record PaymentWebhookRequest(
         @NotNull(message = "A fatura é obrigatória")
         UUID invoiceId,
 
