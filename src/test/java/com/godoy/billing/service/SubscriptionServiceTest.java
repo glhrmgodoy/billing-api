@@ -27,7 +27,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -77,7 +77,7 @@ class SubscriptionServiceTest {
     class Subscribe {
 
         @Test
-        @DisplayName("should create a subscription with a correctly calculated monthly cycle")
+        @DisplayName("deve criar assinatura com ciclo mensal calculado corretamente")
         void shouldCreateSubscriptionWithMonthlyCycle() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, true);
@@ -100,14 +100,14 @@ class SubscriptionServiceTest {
             verify(subscriptionRepository).save(captor.capture());
             Subscription saved = captor.getValue();
 
-            assertEquals(response, result);
-            assertEquals(SubscriptionStatus.ACTIVE, saved.getStatus());
-            assertEquals(LocalDate.now(), saved.getCurrentCycleStart());
-            assertEquals(LocalDate.now().plusMonths(1), saved.getCurrentCycleEnd());
+            assertThat(result).isEqualTo(response);
+            assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+            assertThat(saved.getCurrentCycleStart()).isEqualTo(LocalDate.now());
+            assertThat(saved.getCurrentCycleEnd()).isEqualTo(LocalDate.now().plusMonths(1));
         }
 
         @Test
-        @DisplayName("should correctly calculate the yearly cycle for a YEARLY plan")
+        @DisplayName("deve calcular o ciclo anual corretamente para plano YEARLY")
         void shouldCreateSubscriptionWithYearlyCycle() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.YEARLY, true);
@@ -127,11 +127,11 @@ class SubscriptionServiceTest {
             subscriptionService.subscribe(customer, request);
 
             verify(subscriptionRepository).save(captor.capture());
-            assertEquals(LocalDate.now().plusYears(1), captor.getValue().getCurrentCycleEnd());
+            assertThat(captor.getValue().getCurrentCycleEnd()).isEqualTo(LocalDate.now().plusYears(1));
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the plan does not exist")
+        @DisplayName("deve lançar NotFoundException quando o plano não existir")
         void shouldThrowExceptionWhenPlanDoesNotExist() {
             UUID planId = UUID.randomUUID();
             Customer customer = buildCustomer(UUID.randomUUID());
@@ -139,12 +139,13 @@ class SubscriptionServiceTest {
 
             when(planRepository.findById(planId)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> subscriptionService.subscribe(customer, request));
+            assertThatThrownBy(() -> subscriptionService.subscribe(customer, request))
+                    .isInstanceOf(NotFoundException.class);
             verifyNoInteractions(subscriptionRepository, subscriptionMapper);
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the plan is inactive")
+        @DisplayName("deve lançar BusinessException quando o plano estiver inativo")
         void shouldThrowExceptionWhenPlanIsInactive() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, false);
@@ -152,12 +153,13 @@ class SubscriptionServiceTest {
 
             when(planRepository.findById(plan.getId())).thenReturn(Optional.of(plan));
 
-            assertThrows(BusinessException.class, () -> subscriptionService.subscribe(customer, request));
+            assertThatThrownBy(() -> subscriptionService.subscribe(customer, request))
+                    .isInstanceOf(BusinessException.class);
             verify(subscriptionRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the customer already has an active subscription")
+        @DisplayName("deve lançar BusinessException quando o cliente já tiver assinatura ativa")
         void shouldThrowExceptionWhenCustomerAlreadyHasActiveSubscription() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, true);
@@ -167,7 +169,8 @@ class SubscriptionServiceTest {
             when(subscriptionRepository.existsByCustomerIdAndStatus(customer.getId(), SubscriptionStatus.ACTIVE))
                     .thenReturn(true);
 
-            assertThrows(BusinessException.class, () -> subscriptionService.subscribe(customer, request));
+            assertThatThrownBy(() -> subscriptionService.subscribe(customer, request))
+                    .isInstanceOf(BusinessException.class);
             verify(subscriptionRepository, never()).save(any());
         }
     }
@@ -177,7 +180,7 @@ class SubscriptionServiceTest {
     class FindMine {
 
         @Test
-        @DisplayName("should return the customer's current subscription")
+        @DisplayName("deve retornar a assinatura vigente do cliente")
         void shouldReturnCurrentSubscription() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, true);
@@ -190,17 +193,18 @@ class SubscriptionServiceTest {
                     .thenReturn(Optional.of(subscription));
             when(subscriptionMapper.toResponse(subscription)).thenReturn(response);
 
-            assertEquals(response, subscriptionService.findMine(customer));
+            assertThat(subscriptionService.findMine(customer)).isEqualTo(response);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the customer has no subscription")
+        @DisplayName("deve lançar NotFoundException quando o cliente não tiver assinatura")
         void shouldThrowExceptionWhenNoSubscriptionExists() {
             Customer customer = buildCustomer(UUID.randomUUID());
             when(subscriptionRepository.findByCustomerIdAndStatusNot(customer.getId(), SubscriptionStatus.CANCELLED))
                     .thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> subscriptionService.findMine(customer));
+            assertThatThrownBy(() -> subscriptionService.findMine(customer))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -209,7 +213,7 @@ class SubscriptionServiceTest {
     class Cancel {
 
         @Test
-        @DisplayName("should cancel the subscription without changing currentCycleEnd")
+        @DisplayName("deve cancelar a assinatura sem alterar currentCycleEnd")
         void shouldCancelSubscription() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, true);
@@ -220,22 +224,23 @@ class SubscriptionServiceTest {
 
             subscriptionService.cancel(customer, subscription.getId());
 
-            assertEquals(SubscriptionStatus.CANCELLED, subscription.getStatus());
-            assertEquals(originalCycleEnd, subscription.getCurrentCycleEnd());
+            assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.CANCELLED);
+            assertThat(subscription.getCurrentCycleEnd()).isEqualTo(originalCycleEnd);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the subscription does not exist")
+        @DisplayName("deve lançar NotFoundException quando a assinatura não existir")
         void shouldThrowExceptionWhenSubscriptionDoesNotExist() {
             Customer customer = buildCustomer(UUID.randomUUID());
             UUID subscriptionId = UUID.randomUUID();
             when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> subscriptionService.cancel(customer, subscriptionId));
+            assertThatThrownBy(() -> subscriptionService.cancel(customer, subscriptionId))
+                    .isInstanceOf(NotFoundException.class);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the subscription belongs to another customer")
+        @DisplayName("deve lançar NotFoundException quando a assinatura pertencer a outro cliente")
         void shouldThrowExceptionWhenSubscriptionBelongsToAnotherCustomer() {
             Customer owner = buildCustomer(UUID.randomUUID());
             Customer otherCustomer = buildCustomer(UUID.randomUUID());
@@ -244,13 +249,13 @@ class SubscriptionServiceTest {
 
             when(subscriptionRepository.findById(subscription.getId())).thenReturn(Optional.of(subscription));
 
-            assertThrows(NotFoundException.class,
-                    () -> subscriptionService.cancel(otherCustomer, subscription.getId()));
-            assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
+            assertThatThrownBy(() -> subscriptionService.cancel(otherCustomer, subscription.getId()))
+                    .isInstanceOf(NotFoundException.class);
+            assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the subscription is already canceled")
+        @DisplayName("deve lançar BusinessException quando a assinatura já estiver cancelada")
         void shouldThrowExceptionWhenAlreadyCanceled() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(UUID.randomUUID(), BillingCycle.MONTHLY, true);
@@ -258,7 +263,8 @@ class SubscriptionServiceTest {
 
             when(subscriptionRepository.findById(subscription.getId())).thenReturn(Optional.of(subscription));
 
-            assertThrows(BusinessException.class, () -> subscriptionService.cancel(customer, subscription.getId()));
+            assertThatThrownBy(() -> subscriptionService.cancel(customer, subscription.getId()))
+                    .isInstanceOf(BusinessException.class);
         }
     }
 }

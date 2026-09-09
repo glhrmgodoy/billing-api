@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -84,7 +84,7 @@ class InvoiceServiceTest {
     class FindMine {
 
         @Test
-        @DisplayName("should return the customer's invoices mapped")
+        @DisplayName("deve retornar as faturas do cliente mapeadas")
         void shouldReturnCustomerInvoices() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(BillingCycle.MONTHLY);
@@ -99,8 +99,7 @@ class InvoiceServiceTest {
 
             List<InvoiceResponse> result = invoiceService.findMine(customer);
 
-            assertEquals(1, result.size());
-            assertEquals(response, result.get(0));
+            assertThat(result).hasSize(1).containsExactly(response);
         }
     }
 
@@ -109,7 +108,7 @@ class InvoiceServiceTest {
     class FindById {
 
         @Test
-        @DisplayName("should return the invoice when it belongs to the customer")
+        @DisplayName("deve retornar a fatura quando pertencer ao cliente")
         void shouldReturnInvoiceOwnedByCustomer() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(BillingCycle.MONTHLY);
@@ -122,21 +121,22 @@ class InvoiceServiceTest {
             when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
             when(invoiceMapper.toResponse(invoice)).thenReturn(response);
 
-            assertEquals(response, invoiceService.findById(customer, invoice.getId()));
+            assertThat(invoiceService.findById(customer, invoice.getId())).isEqualTo(response);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the invoice does not exist")
+        @DisplayName("deve lançar NotFoundException quando a fatura não existir")
         void shouldThrowExceptionWhenInvoiceDoesNotExist() {
             Customer customer = buildCustomer(UUID.randomUUID());
             UUID invoiceId = UUID.randomUUID();
             when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> invoiceService.findById(customer, invoiceId));
+            assertThatThrownBy(() -> invoiceService.findById(customer, invoiceId))
+                    .isInstanceOf(NotFoundException.class);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the invoice belongs to another customer")
+        @DisplayName("deve lançar NotFoundException quando a fatura pertencer a outro cliente")
         void shouldThrowExceptionWhenInvoiceBelongsToAnotherCustomer() {
             Customer owner = buildCustomer(UUID.randomUUID());
             Customer otherCustomer = buildCustomer(UUID.randomUUID());
@@ -146,7 +146,8 @@ class InvoiceServiceTest {
 
             when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
 
-            assertThrows(NotFoundException.class, () -> invoiceService.findById(otherCustomer, invoice.getId()));
+            assertThatThrownBy(() -> invoiceService.findById(otherCustomer, invoice.getId()))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -155,7 +156,7 @@ class InvoiceServiceTest {
     class GenerateInvoices {
 
         @Test
-        @DisplayName("should generate an invoice and advance the cycle for monthly subscriptions due today")
+        @DisplayName("deve gerar fatura e avançar o ciclo para assinaturas mensais vencendo hoje")
         void shouldGenerateInvoiceAndAdvanceMonthlyCycle() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(BillingCycle.MONTHLY);
@@ -173,17 +174,17 @@ class InvoiceServiceTest {
             verify(invoiceRepository).save(captor.capture());
             Invoice generated = captor.getValue();
 
-            assertEquals(subscription, generated.getSubscription());
-            assertEquals(plan.getPrice(), generated.getAmount());
-            assertEquals(InvoiceStatus.PENDING, generated.getStatus());
-            assertEquals(currentCycleEnd.plusDays(5), generated.getDueDate());
+            assertThat(generated.getSubscription()).isEqualTo(subscription);
+            assertThat(generated.getAmount()).isEqualByComparingTo(plan.getPrice());
+            assertThat(generated.getStatus()).isEqualTo(InvoiceStatus.PENDING);
+            assertThat(generated.getDueDate()).isEqualTo(currentCycleEnd.plusDays(5));
 
-            assertEquals(currentCycleEnd, subscription.getCurrentCycleStart());
-            assertEquals(currentCycleEnd.plusMonths(1), subscription.getCurrentCycleEnd());
+            assertThat(subscription.getCurrentCycleStart()).isEqualTo(currentCycleEnd);
+            assertThat(subscription.getCurrentCycleEnd()).isEqualTo(currentCycleEnd.plusMonths(1));
         }
 
         @Test
-        @DisplayName("should not generate any invoice when no subscriptions are due")
+        @DisplayName("não deve gerar nenhuma fatura quando não houver assinaturas vencendo")
         void shouldNotGenerateInvoiceWhenNoSubscriptionsAreDue() {
             when(subscriptionRepository.findByStatusAndCurrentCycleEndLessThanEqual(
                     SubscriptionStatus.ACTIVE, LocalDate.now()))
@@ -200,7 +201,7 @@ class InvoiceServiceTest {
     class MarkOverdue {
 
         @Test
-        @DisplayName("should mark the invoice as OVERDUE and suspend the subscription")
+        @DisplayName("deve marcar fatura como OVERDUE e suspender a assinatura")
         void shouldMarkInvoiceOverdueAndSuspendSubscription() {
             Customer customer = buildCustomer(UUID.randomUUID());
             Plan plan = buildPlan(BillingCycle.MONTHLY);
@@ -213,12 +214,12 @@ class InvoiceServiceTest {
 
             invoiceService.markOverdueInvoices();
 
-            assertEquals(InvoiceStatus.PENDING, invoice.getStatus());
-            assertEquals(SubscriptionStatus.SUSPENDED, subscription.getStatus());
+            assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.PENDING);
+            assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.SUSPENDED);
         }
 
         @Test
-        @DisplayName("should not change anything when there are no overdue invoices")
+        @DisplayName("não deve alterar nada quando não houver faturas vencidas")
         void shouldNotChangeAnythingWhenNoOverdueInvoices() {
             when(invoiceRepository.findByStatusAndDueDateBefore(InvoiceStatus.PENDING, LocalDate.now()))
                     .thenReturn(List.of());

@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -62,7 +62,7 @@ class PlanServiceTest {
     class Create {
 
         @Test
-        @DisplayName("should map, save and return the created plan")
+        @DisplayName("deve mapear, salvar e retornar o plano criado")
         void shouldCreatePlan() {
             PlanRequest request = buildRequest();
             Plan planWithoutId = Plan.builder().name(request.name()).build();
@@ -75,7 +75,7 @@ class PlanServiceTest {
 
             PlanResponse result = planService.create(request);
 
-            assertEquals(response, result);
+            assertThat(result).isEqualTo(response);
             verify(planRepository).save(planWithoutId);
         }
     }
@@ -85,7 +85,7 @@ class PlanServiceTest {
     class FindAllActive {
 
         @Test
-        @DisplayName("should return all active plans mapped")
+        @DisplayName("deve retornar todos os planos ativos mapeados")
         void shouldListActivePlans() {
             Plan plan1 = buildPlan(UUID.randomUUID(), "Basic", true);
             Plan plan2 = buildPlan(UUID.randomUUID(), "Pro", true);
@@ -98,18 +98,17 @@ class PlanServiceTest {
 
             List<PlanResponse> result = planService.findAllActive();
 
-            assertEquals(2, result.size());
-            assertTrue(result.containsAll(List.of(response1, response2)));
+            assertThat(result).hasSize(2).containsExactlyInAnyOrder(response1, response2);
         }
 
         @Test
-        @DisplayName("should return an empty list when there are no active plans")
+        @DisplayName("deve retornar lista vazia quando não houver planos ativos")
         void shouldReturnEmptyListWhenNoActivePlans() {
             when(planRepository.findByActiveTrue()).thenReturn(List.of());
 
             List<PlanResponse> result = planService.findAllActive();
 
-            assertTrue(result.isEmpty());
+            assertThat(result).isEmpty();
             verifyNoInteractions(planMapper);
         }
     }
@@ -119,7 +118,7 @@ class PlanServiceTest {
     class FindById {
 
         @Test
-        @DisplayName("should return the plan when the id exists")
+        @DisplayName("deve retornar o plano quando o id existir")
         void shouldReturnPlanWhenIdExists() {
             UUID id = UUID.randomUUID();
             Plan plan = buildPlan(id, "Pro", true);
@@ -128,18 +127,18 @@ class PlanServiceTest {
             when(planRepository.findById(id)).thenReturn(Optional.of(plan));
             when(planMapper.toResponse(plan)).thenReturn(response);
 
-            PlanResponse result = planService.findById(id);
-
-            assertEquals(response, result);
+            assertThat(planService.findById(id)).isEqualTo(response);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the id does not exist")
+        @DisplayName("deve lançar NotFoundException quando o id não existir")
         void shouldThrowNotFoundExceptionWhenPlanDoesNotExist() {
             UUID id = UUID.randomUUID();
             when(planRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> planService.findById(id));
+            assertThatThrownBy(() -> planService.findById(id))
+                    .isInstanceOf(NotFoundException.class);
+
 
             verifyNoInteractions(planMapper);
         }
@@ -150,7 +149,7 @@ class PlanServiceTest {
     class Update {
 
         @Test
-        @DisplayName("should update the plan fields without calling save() explicitly")
+        @DisplayName("deve atualizar os campos do plano sem chamar save() explicitamente")
         void shouldUpdatePlanViaDirtyChecking() {
             UUID id = UUID.randomUUID();
             Plan existingPlan = buildPlan(id, "Old Name", true);
@@ -162,16 +161,16 @@ class PlanServiceTest {
 
             PlanResponse result = planService.update(id, request);
 
-            assertEquals(response, result);
-            assertEquals("New Name", existingPlan.getName());
-            assertEquals(BigDecimal.valueOf(49.90), existingPlan.getPrice());
-            assertEquals(BillingCycle.YEARLY, existingPlan.getBillingCycle());
+            assertThat(result).isEqualTo(response);
+            assertThat(existingPlan.getName()).isEqualTo("New Name");
+            assertThat(existingPlan.getPrice()).isEqualByComparingTo(BigDecimal.valueOf(49.90));
+            assertThat(existingPlan.getBillingCycle()).isEqualTo(BillingCycle.YEARLY);
 
             verify(planRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("should not change the active field through the generic update")
+        @DisplayName("não deve alterar o campo active através do update genérico")
         void shouldNotChangeActiveFieldOnUpdate() {
             UUID id = UUID.randomUUID();
             Plan existingPlan = buildPlan(id, "Name", true);
@@ -182,18 +181,19 @@ class PlanServiceTest {
 
             planService.update(id, request);
 
-            assertTrue(existingPlan.getActive());
+            assertThat(existingPlan.getActive()).isTrue();
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the plan does not exist")
+        @DisplayName("deve lançar NotFoundException quando o plano não existir")
         void shouldThrowNotFoundExceptionWhenPlanDoesNotExistOnUpdate() {
             UUID id = UUID.randomUUID();
             PlanRequest request = buildRequest();
 
             when(planRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> planService.update(id, request));
+            assertThatThrownBy(() -> planService.update(id, request))
+                    .isInstanceOf(NotFoundException.class);
             verifyNoInteractions(planMapper);
         }
     }
@@ -203,7 +203,7 @@ class PlanServiceTest {
     class Inactivate {
 
         @Test
-        @DisplayName("should mark the plan as inactive without calling save() explicitly")
+        @DisplayName("deve marcar o plano como inativo sem chamar save() explicitamente")
         void shouldInactivatePlan() {
             UUID id = UUID.randomUUID();
             Plan plan = buildPlan(id, "Pro", true);
@@ -212,17 +212,18 @@ class PlanServiceTest {
 
             planService.inactivate(id);
 
-            assertFalse(plan.getActive());
+            assertThat(plan.getActive()).isFalse();
             verify(planRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the plan does not exist")
+        @DisplayName("deve lançar NotFoundException quando o plano não existir")
         void shouldThrowNotFoundExceptionWhenPlanDoesNotExistOnInactivate() {
             UUID id = UUID.randomUUID();
             when(planRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> planService.inactivate(id));
+            assertThatThrownBy(() -> planService.inactivate(id))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 }

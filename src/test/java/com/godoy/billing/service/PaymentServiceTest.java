@@ -26,7 +26,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -68,7 +68,7 @@ class PaymentServiceTest {
     class ConfirmPayment {
 
         @Test
-        @DisplayName("should confirm the payment and mark the invoice as PAID")
+        @DisplayName("deve confirmar o pagamento e marcar a fatura como PAID")
         void shouldConfirmPaymentSuccessfully() {
             Subscription subscription = buildSubscription(SubscriptionStatus.ACTIVE);
             Invoice invoice = buildInvoice(InvoiceStatus.PENDING, subscription);
@@ -86,13 +86,13 @@ class PaymentServiceTest {
 
             PaymentResponse result = paymentService.confirmPayment(request);
 
-            assertEquals(response, result);
-            assertEquals(InvoiceStatus.PAID, invoice.getStatus());
-            assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
+            assertThat(result).isEqualTo(response);
+            assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.PAID);
+            assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         }
 
         @Test
-        @DisplayName("should reactivate a suspended subscription when the payment is confirmed")
+        @DisplayName("deve reativar a assinatura suspensa ao confirmar o pagamento")
         void shouldReactivateSuspendedSubscription() {
             Subscription subscription = buildSubscription(SubscriptionStatus.SUSPENDED);
             Invoice invoice = buildInvoice(InvoiceStatus.OVERDUE, subscription);
@@ -109,11 +109,11 @@ class PaymentServiceTest {
 
             paymentService.confirmPayment(request);
 
-            assertEquals(SubscriptionStatus.ACTIVE, subscription.getStatus());
+            assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         }
 
         @Test
-        @DisplayName("should return the already-processed payment without trying to save it again (idempotency)")
+        @DisplayName("deve retornar o pagamento já processado sem tentar salvar de novo (idempotência)")
         void shouldReturnAlreadyProcessedPayment() {
             Invoice invoice = buildInvoice(InvoiceStatus.PAID, buildSubscription(SubscriptionStatus.ACTIVE));
             Payment existingPayment = Payment.builder().id(UUID.randomUUID()).invoice(invoice)
@@ -129,13 +129,13 @@ class PaymentServiceTest {
 
             PaymentResponse result = paymentService.confirmPayment(request);
 
-            assertEquals(response, result);
+            assertThat(result).isEqualTo(response);
             verifyNoInteractions(invoiceRepository);
             verify(paymentRepository, never()).saveAndFlush(any());
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the invoice does not exist")
+        @DisplayName("deve lançar NotFoundException quando a fatura não existir")
         void shouldThrowExceptionWhenInvoiceDoesNotExist() {
             UUID invoiceId = UUID.randomUUID();
             PaymentWebhookRequest request = buildRequest(invoiceId, "evt_789");
@@ -143,12 +143,13 @@ class PaymentServiceTest {
             when(paymentRepository.findByIdempotencyKey("evt_789")).thenReturn(Optional.empty());
             when(invoiceRepository.findById(invoiceId)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> paymentService.confirmPayment(request));
+            assertThatThrownBy(() -> paymentService.confirmPayment(request))
+                    .isInstanceOf(NotFoundException.class);
             verify(paymentRepository, never()).saveAndFlush(any());
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the invoice is already paid")
+        @DisplayName("deve lançar BusinessException quando a fatura já estiver paga")
         void shouldThrowExceptionWhenInvoiceAlreadyPaid() {
             Invoice invoice = buildInvoice(InvoiceStatus.PAID, buildSubscription(SubscriptionStatus.ACTIVE));
             PaymentWebhookRequest request = buildRequest(invoice.getId(), "evt_new_key");
@@ -156,12 +157,13 @@ class PaymentServiceTest {
             when(paymentRepository.findByIdempotencyKey("evt_new_key")).thenReturn(Optional.empty());
             when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
 
-            assertThrows(BusinessException.class, () -> paymentService.confirmPayment(request));
+            assertThatThrownBy(() -> paymentService.confirmPayment(request))
+                    .isInstanceOf(BusinessException.class);
             verify(paymentRepository, never()).saveAndFlush(any());
         }
 
         @Test
-        @DisplayName("should recover the concurrently-inserted payment when the idempotency constraint blocks the insert")
+        @DisplayName("deve recuperar o pagamento concorrente quando a constraint de idempotência barrar o insert")
         void shouldRecoverPaymentAfterConcurrencyConflict() {
             Subscription subscription = buildSubscription(SubscriptionStatus.ACTIVE);
             Invoice invoice = buildInvoice(InvoiceStatus.PENDING, subscription);
@@ -183,8 +185,8 @@ class PaymentServiceTest {
 
             PaymentResponse result = paymentService.confirmPayment(request);
 
-            assertEquals(response, result);
-            assertEquals(InvoiceStatus.PENDING, invoice.getStatus());
+            assertThat(result).isEqualTo(response);
+            assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.PENDING);
         }
     }
 }

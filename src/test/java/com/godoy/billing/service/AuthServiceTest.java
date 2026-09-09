@@ -18,7 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,7 +51,7 @@ class AuthServiceTest {
     class Login {
 
         @Test
-        @DisplayName("should generate the token when credentials are valid")
+        @DisplayName("deve gerar o token quando as credenciais forem válidas")
         void shouldLoginSuccessfully() {
             Customer customer = buildCustomer(true);
             LoginRequest request = new LoginRequest(customer.getEmail(), "correct-password");
@@ -63,35 +63,38 @@ class AuthServiceTest {
 
             AuthResponse result = authService.login(request);
 
-            assertEquals("generated-token", result.token());
-            assertEquals("Bearer", result.tokenType());
-            assertEquals(3_600_000L, result.expiresInMs());
+            assertThat(result.token()).isEqualTo("generated-token");
+            assertThat(result.tokenType()).isEqualTo("Bearer");
+            assertThat(result.expiresInMs()).isEqualTo(3_600_000L);
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the email does not exist")
+        @DisplayName("deve lançar BusinessException quando o e-mail não existir")
         void shouldThrowExceptionWhenEmailDoesNotExist() {
             LoginRequest request = new LoginRequest("doesnotexist@email.com", "whatever");
             when(customerRepository.findByEmail(request.email())).thenReturn(Optional.empty());
 
-            assertThrows(BusinessException.class, () -> authService.login(request));
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(BusinessException.class);
             verifyNoInteractions(passwordEncoder, jwtService);
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the account is inactive")
+        @DisplayName("deve lançar BusinessException quando a conta estiver inativa")
         void shouldThrowExceptionWhenAccountIsInactive() {
             Customer customer = buildCustomer(false);
             LoginRequest request = new LoginRequest(customer.getEmail(), "correct-password");
 
             when(customerRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
 
-            assertThrows(BusinessException.class, () -> authService.login(request));
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(BusinessException.class);
+
             verifyNoInteractions(passwordEncoder, jwtService);
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the password is incorrect")
+        @DisplayName("deve lançar BusinessException quando a senha estiver incorreta")
         void shouldThrowExceptionWhenPasswordIsIncorrect() {
             Customer customer = buildCustomer(true);
             LoginRequest request = new LoginRequest(customer.getEmail(), "wrong-password");
@@ -99,7 +102,8 @@ class AuthServiceTest {
             when(customerRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
             when(passwordEncoder.matches("wrong-password", customer.getPassword())).thenReturn(false);
 
-            assertThrows(BusinessException.class, () -> authService.login(request));
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(BusinessException.class);
             verifyNoInteractions(jwtService);
         }
     }

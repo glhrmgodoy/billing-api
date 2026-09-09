@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -59,7 +59,7 @@ class CustomerServiceTest {
     class Register {
 
         @Test
-        @DisplayName("should hash the password before saving")
+        @DisplayName("deve criptografar a senha antes de salvar")
         void shouldHashPasswordBeforeSaving() {
             CustomerRequest request = buildRequest("guilherme@email.com");
             Customer customerWithoutPassword = Customer.builder().name(request.name()).email(request.email()).build();
@@ -75,18 +75,19 @@ class CustomerServiceTest {
 
             CustomerResponse result = customerService.register(request);
 
-            assertEquals(response, result);
-            assertEquals("encoded-password", customerWithoutPassword.getPassword());
+            assertThat(result).isEqualTo(response);
+            assertThat(customerWithoutPassword.getPassword()).isEqualTo("encoded-password");
             verify(passwordEncoder).encode("password12345");
         }
 
         @Test
-        @DisplayName("should throw BusinessException when the email is already registered")
+        @DisplayName("deve lançar BusinessException quando o e-mail já estiver cadastrado")
         void shouldThrowExceptionForDuplicateEmail() {
             CustomerRequest request = buildRequest("guilherme@email.com");
             when(customerRepository.existsByEmail(request.email())).thenReturn(true);
 
-            assertThrows(BusinessException.class, () -> customerService.register(request));
+            assertThatThrownBy(() -> customerService.register(request))
+                    .isInstanceOf(BusinessException.class);
 
             verifyNoInteractions(passwordEncoder, customerMapper);
             verify(customerRepository, never()).save(any());
@@ -98,7 +99,7 @@ class CustomerServiceTest {
     class FindById {
 
         @Test
-        @DisplayName("should return the customer when the id exists")
+        @DisplayName("deve retornar o cliente quando o id existir")
         void shouldReturnExistingCustomer() {
             UUID id = UUID.randomUUID();
             Customer customer = buildCustomer(id, "guilherme@email.com", true);
@@ -107,16 +108,17 @@ class CustomerServiceTest {
             when(customerRepository.findById(id)).thenReturn(Optional.of(customer));
             when(customerMapper.toResponse(customer)).thenReturn(response);
 
-            assertEquals(response, customerService.findById(id));
+            assertThat(customerService.findById(id)).isEqualTo(response);
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the id does not exist")
+        @DisplayName("deve lançar NotFoundException quando o id não existir")
         void shouldThrowNotFoundExceptionWhenCustomerDoesNotExist() {
             UUID id = UUID.randomUUID();
             when(customerRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> customerService.findById(id));
+            assertThatThrownBy(() -> customerService.findById(id))
+                    .isInstanceOf(NotFoundException.class);
             verifyNoInteractions(customerMapper);
         }
     }
@@ -126,7 +128,7 @@ class CustomerServiceTest {
     class Inactivate {
 
         @Test
-        @DisplayName("should mark the customer as inactive without calling save() explicitly")
+        @DisplayName("deve marcar o cliente como inativo sem chamar save() explicitamente")
         void shouldInactivateCustomer() {
             UUID id = UUID.randomUUID();
             Customer customer = buildCustomer(id, "guilherme@email.com", true);
@@ -135,17 +137,18 @@ class CustomerServiceTest {
 
             customerService.inactivate(id);
 
-            assertFalse(customer.getActive());
+            assertThat(customer.getActive()).isFalse();
             verify(customerRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("should throw NotFoundException when the customer does not exist")
+        @DisplayName("deve lançar NotFoundException quando o cliente não existir")
         void shouldThrowExceptionWhenInactivatingNonExistentCustomer() {
             UUID id = UUID.randomUUID();
             when(customerRepository.findById(id)).thenReturn(Optional.empty());
 
-            assertThrows(NotFoundException.class, () -> customerService.inactivate(id));
+            assertThatThrownBy(() -> customerService.inactivate(id))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 }
