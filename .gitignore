@@ -34,3 +34,7 @@ build/
 
 ### Environment ###
 .env
+
+### Local notes (not versioned) ###
+CLAUDE.md
+docs/aws-roadmap.md
