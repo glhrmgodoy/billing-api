@@ -12,7 +12,8 @@ API REST de cobrança recorrente (assinaturas), inspirada em regras de negócio 
 - Flyway (migrations versionadas)
 - MapStruct (mapeamento DTO ↔ Entity)
 - Springdoc OpenAPI (Swagger UI)
-- JUnit 5 + Mockito
+- Spring Cloud AWS 4.1.1 (Secrets Manager, SES, SQS, SNS)
+- JUnit 5 + Mockito + AssertJ
 
 ## Regras de negócio
 
@@ -22,30 +23,45 @@ API REST de cobrança recorrente (assinaturas), inspirada em regras de negócio 
 - **Concorrência na fatura**: a entidade `Invoice` usa locking otimista (`@Version`) para evitar que duas confirmações de pagamento simultâneas corrompam o status uma da outra.
 - **Uma assinatura ativa por cliente**: garantido tanto na aplicação quanto por um índice único parcial no Postgres.
 
+## Integração AWS
+
+- **Secrets Manager**: credenciais do banco e segredo do JWT resolvidos via `spring.config.import`, sem segredo em variável de ambiente ou no repositório.
+- **SES**: e-mails de confirmação e cancelamento de assinatura e de aviso de fatura vencida, disparados por eventos de domínio após o commit (*best-effort*).
+- **SNS → SQS (fan-out)**: a confirmação de pagamento publica um evento no tópico `billing-dev-payment-confirmed`, que entrega a duas filas independentes: processamento do pagamento e envio de recibo por e-mail. Cada fila tem DLQ (`maxReceiveCount = 3`).
+- **Idempotência por consumidor**: SNS/SQS Standard entregam *at-least-once*; cada consumidor registra `(payment_id, consumer)` em `processed_payment_messages` (padrão *idempotent consumer*), então reentregas não geram recibo em dobro.
+
 ## Como rodar
 
 ### Pré-requisitos
 
 - Java 21+
 - Docker (pra subir o PostgreSQL) — ou uma instância própria do Postgres já rodando
+- AWS CLI com o profile `billing-dev` configurado, região `us-east-1`
+- Recursos AWS criados:
+  - secrets `billing/dev/db-credentials` (JSON com `username`/`password`) e `billing/dev/jwt-secret` (texto puro, mínimo 32 bytes — `openssl rand -base64 32`)
+  - identidades verificadas no SES (remetente e destinatários, enquanto a conta estiver em sandbox)
+  - tópico SNS `billing-dev-payment-confirmed` e as filas `billing-dev-payment-processing` e `billing-dev-payment-receipt` assinadas nele, cada uma com sua DLQ
 
 ### 1. Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto (esse arquivo **não** deve ser commitado — já está no `.gitignore`):
+Crie um arquivo `.env` na raiz do projeto (esse arquivo **não** deve ser commitado — já está no `.gitignore`). Ele é lido pelo `docker compose` para inicializar o Postgres:
 
 ```env
 POSTGRES_DB=billing
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=sua_senha_local
-
-JWT_SECRET=gere_um_valor_com_openssl_rand_-base64_32
 ```
 
-Pra gerar um `JWT_SECRET` válido (mínimo 32 caracteres, exigido pelo HMAC-SHA256):
+`POSTGRES_USER`/`POSTGRES_PASSWORD` precisam bater com os valores do secret `billing/dev/db-credentials` — a aplicação lê as credenciais do Secrets Manager, não do `.env`.
 
-```bash
-openssl rand -base64 32
-```
+O `spring-boot:run` **não** lê o `.env`. Exporte no shell as variáveis que a aplicação exige (todas sem valor padrão — sem elas o boot falha por placeholder não resolvido):
+
+| Variável | Exemplo | Uso |
+|---|---|---|
+| `POSTGRES_DB` | `billing` | Nome do banco na URL JDBC |
+| `SNS_TOPIC_ARN` | `arn:aws:sns:us-east-1:<account-id>:billing-dev-payment-confirmed` | Tópico onde o evento de pagamento confirmado é publicado (ARN, não nome, para a lib não chamar `sns:CreateTopic`) |
+| `SQS_PROCESSING_NAME` | `billing-dev-payment-processing` | Fila do consumidor de processamento |
+| `SQS_RECEIPT_NAME` | `billing-dev-payment-receipt` | Fila do consumidor de recibo |
 
 ### 2. Subir o banco de dados
 
@@ -90,11 +106,13 @@ src/main/java/com/godoy/billing/
 ├── config/          # SecurityConfig
 ├── controller/      # Endpoints REST
 ├── service/         # Regras de negócio
+├── event/           # Eventos de domínio e listeners internos (e-mail)
+├── messaging/       # Fronteira com SNS/SQS (publicador e consumidores)
 ├── security/        # JWT (geração, validação, filtro, UserDetails)
 ├── repository/      # Interfaces Spring Data JPA
 ├── domain/
-│   ├── entity/      # Plan, Customer, Subscription, Invoice, Payment
-│   └── enums/       # BillingCycle, SubscriptionStatus, InvoiceStatus
+│   ├── entity/      # Plan, Customer, Subscription, Invoice, Payment, ProcessedPaymentMessage
+│   └── enums/       # BillingCycle, SubscriptionStatus, InvoiceStatus, PaymentMessageConsumer
 ├── dto/
 │   ├── request/
 │   └── response/
@@ -110,3 +128,5 @@ src/main/java/com/godoy/billing/
 - [x] Tratamento global de exceções
 - [x] Controllers REST
 - [x] Testes unitários
+- [x] Integração AWS: Secrets Manager, SES, SQS, SNS
+- [ ] Integração AWS: Parameter Store, CloudWatch
