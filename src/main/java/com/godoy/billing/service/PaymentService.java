@@ -7,6 +7,7 @@ import com.godoy.billing.domain.enums.InvoiceStatus;
 import com.godoy.billing.domain.enums.SubscriptionStatus;
 import com.godoy.billing.dto.request.PaymentWebhookRequest;
 import com.godoy.billing.dto.response.PaymentResponse;
+import com.godoy.billing.event.PaymentConfirmedEvent;
 import com.godoy.billing.exception.BusinessException;
 import com.godoy.billing.exception.NotFoundException;
 import com.godoy.billing.mapper.PaymentMapper;
@@ -14,6 +15,7 @@ import com.godoy.billing.repository.InvoiceRepository;
 import com.godoy.billing.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
     private final PaymentMapper paymentMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public PaymentResponse confirmPayment(PaymentWebhookRequest request) {
@@ -67,6 +70,14 @@ public class PaymentService {
         }
 
         invoice.setStatus(InvoiceStatus.PAID);
+
+        applicationEventPublisher.publishEvent(
+                new PaymentConfirmedEvent(
+                        payment.getId(),
+                        invoice.getId(),
+                        payment.getAmountPaid()
+                )
+        );
 
         Subscription subscription = invoice.getSubscription();
 

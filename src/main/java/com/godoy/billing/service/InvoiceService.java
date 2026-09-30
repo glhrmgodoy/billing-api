@@ -6,12 +6,14 @@ import com.godoy.billing.domain.entity.Subscription;
 import com.godoy.billing.domain.enums.InvoiceStatus;
 import com.godoy.billing.domain.enums.SubscriptionStatus;
 import com.godoy.billing.dto.response.InvoiceResponse;
+import com.godoy.billing.event.InvoiceOverdueEvent;
 import com.godoy.billing.exception.NotFoundException;
 import com.godoy.billing.mapper.InvoiceMapper;
 import com.godoy.billing.repository.InvoiceRepository;
 import com.godoy.billing.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final InvoiceMapper invoiceMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public List<InvoiceResponse> findMine(Customer customer) {
         return invoiceRepository.findBySubscription_Customer_Id(customer.getId())
@@ -86,10 +89,21 @@ public class InvoiceService {
         log.info("Job de inadimplência: {} fatura(s) vencida(s) sem pagamento", overdueInvoices.size());
 
         for (Invoice invoice : overdueInvoices) {
-            invoice.setStatus(InvoiceStatus.PENDING);
+            invoice.setStatus(InvoiceStatus.OVERDUE);
 
             Subscription subscription = invoice.getSubscription();
             subscription.setStatus(SubscriptionStatus.SUSPENDED);
+
+            applicationEventPublisher.publishEvent(
+                    new InvoiceOverdueEvent(
+                            invoice.getId(),
+                            invoice.getSubscription().getCustomer().getEmail(),
+                            invoice.getSubscription().getCustomer().getName(),
+                            invoice.getSubscription().getPlan().getName(),
+                            invoice.getAmount(),
+                            invoice.getDueDate()
+                    )
+            );
         }
     }
 }

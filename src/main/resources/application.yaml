@@ -2,10 +2,13 @@ spring:
   application:
     name: billing
 
+  config:
+    import: aws-secretsmanager:billing/dev/db-credentials?prefix=db.;billing/dev/jwt-secret
+
   datasource:
     url: jdbc:postgresql://localhost:5432/${POSTGRES_DB}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    username: ${db.username}
+    password: ${db.password}
 
   jpa:
     hibernate:
@@ -18,6 +21,27 @@ spring:
   flyway:
     enabled: true
 
+  cloud:
+    aws:
+      region:
+        static: us-east-1
+      credentials:
+        profile:
+          name: billing-dev
+      sqs:
+        queue-not-found-strategy: fail
+
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${jwt-secret}
   expiration-ms: 3600000
+
+notification:
+  mail:
+    from: guilherme0510g@gmail.com
+
+aws:
+  sqs:
+    payment-processing-queue-name: ${SQS_PROCESSING_NAME}
+    payment-receipt-queue-name: ${SQS_RECEIPT_NAME}
+  sns:
+    payment-confirmed-topic-arn: ${SNS_TOPIC_ARN}

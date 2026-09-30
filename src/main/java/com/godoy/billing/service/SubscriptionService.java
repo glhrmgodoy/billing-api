@@ -3,16 +3,18 @@ package com.godoy.billing.service;
 import com.godoy.billing.domain.entity.Customer;
 import com.godoy.billing.domain.entity.Plan;
 import com.godoy.billing.domain.entity.Subscription;
-import com.godoy.billing.domain.enums.BillingCycle;
 import com.godoy.billing.domain.enums.SubscriptionStatus;
 import com.godoy.billing.dto.request.SubscriptionRequest;
 import com.godoy.billing.dto.response.SubscriptionResponse;
+import com.godoy.billing.event.SubscriptionCancelledEvent;
+import com.godoy.billing.event.SubscriptionConfirmedEvent;
 import com.godoy.billing.exception.BusinessException;
 import com.godoy.billing.exception.NotFoundException;
 import com.godoy.billing.mapper.SubscriptionMapper;
 import com.godoy.billing.repository.PlanRepository;
 import com.godoy.billing.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,7 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final PlanRepository planRepository;
     private final SubscriptionMapper subscriptionMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public SubscriptionResponse subscribe(Customer customer, SubscriptionRequest request) {
@@ -53,6 +56,16 @@ public class SubscriptionService {
                 .build();
 
         Subscription saved = subscriptionRepository.save(subscription);
+
+        applicationEventPublisher.publishEvent(
+                new SubscriptionConfirmedEvent(
+                        saved.getId(),
+                        customer.getEmail(),
+                        customer.getName(),
+                        plan.getName()
+                )
+        );
+
         return subscriptionMapper.toResponse(saved);
     }
 
@@ -78,5 +91,14 @@ public class SubscriptionService {
         }
 
         subscription.setStatus(SubscriptionStatus.CANCELLED);
+
+        applicationEventPublisher.publishEvent(
+                new SubscriptionCancelledEvent(
+                        subscription.getId(),
+                        customer.getEmail(), customer.getName(),
+                        subscription.getPlan().getName(),
+                        subscription.getCurrentCycleEnd()
+                )
+        );
     }
 }
