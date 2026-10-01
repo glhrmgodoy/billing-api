@@ -12,7 +12,7 @@ API REST de cobrança recorrente (assinaturas), inspirada em regras de negócio 
 - Flyway (migrations versionadas)
 - MapStruct (mapeamento DTO ↔ Entity)
 - Springdoc OpenAPI (Swagger UI)
-- Spring Cloud AWS 4.1.1 (Secrets Manager, SES, SQS, SNS)
+- Spring Cloud AWS 4.1.1 (Secrets Manager, Parameter Store, SES, SQS, SNS)
 - JUnit 5 + Mockito + AssertJ
 
 ## Regras de negócio
@@ -26,6 +26,7 @@ API REST de cobrança recorrente (assinaturas), inspirada em regras de negócio 
 ## Integração AWS
 
 - **Secrets Manager**: credenciais do banco e segredo do JWT resolvidos via `spring.config.import`, sem segredo em variável de ambiente ou no repositório.
+- **Parameter Store**: configuração não sensível que varia por ambiente (nomes das filas, ARN do tópico, remetente de e-mail) vem do path `/billing/<env>/`, também via `spring.config.import`. A aplicação só tem `ssm:GetParametersByPath` no próprio path; o que é política de código (ex.: expiração do JWT) continua versionado no YAML.
 - **SES**: e-mails de confirmação e cancelamento de assinatura e de aviso de fatura vencida, disparados por eventos de domínio após o commit (*best-effort*).
 - **SNS → SQS (fan-out)**: a confirmação de pagamento publica um evento no tópico `billing-dev-payment-confirmed`, que entrega a duas filas independentes: processamento do pagamento e envio de recibo por e-mail. Cada fila tem DLQ (`maxReceiveCount = 3`).
 - **Idempotência por consumidor**: SNS/SQS Standard entregam *at-least-once*; cada consumidor registra `(payment_id, consumer)` em `processed_payment_messages` (padrão *idempotent consumer*), então reentregas não geram recibo em dobro.
@@ -41,6 +42,14 @@ API REST de cobrança recorrente (assinaturas), inspirada em regras de negócio 
   - secrets `billing/dev/db-credentials` (JSON com `username`/`password`) e `billing/dev/jwt-secret` (texto puro, mínimo 32 bytes — `openssl rand -base64 32`)
   - identidades verificadas no SES (remetente e destinatários, enquanto a conta estiver em sandbox)
   - tópico SNS `billing-dev-payment-confirmed` e as filas `billing-dev-payment-processing` e `billing-dev-payment-receipt` assinadas nele, cada uma com sua DLQ
+  - parâmetros `String` no Parameter Store, sob `/billing/dev/` (o nome é a property com `/` no lugar de `.`):
+
+    | Parâmetro | Exemplo |
+    |---|---|
+    | `/billing/dev/aws/sns/payment-confirmed-topic-arn` | `arn:aws:sns:us-east-1:<account-id>:billing-dev-payment-confirmed` (ARN, não nome, para a lib não chamar `sns:CreateTopic`) |
+    | `/billing/dev/aws/sqs/payment-processing-queue-name` | `billing-dev-payment-processing` |
+    | `/billing/dev/aws/sqs/payment-receipt-queue-name` | `billing-dev-payment-receipt` |
+    | `/billing/dev/notification/mail/from` | remetente verificado no SES |
 
 ### 1. Variáveis de ambiente
 
@@ -54,14 +63,7 @@ POSTGRES_PASSWORD=sua_senha_local
 
 `POSTGRES_USER`/`POSTGRES_PASSWORD` precisam bater com os valores do secret `billing/dev/db-credentials` — a aplicação lê as credenciais do Secrets Manager, não do `.env`.
 
-O `spring-boot:run` **não** lê o `.env`. Exporte no shell as variáveis que a aplicação exige (todas sem valor padrão — sem elas o boot falha por placeholder não resolvido):
-
-| Variável | Exemplo | Uso |
-|---|---|---|
-| `POSTGRES_DB` | `billing` | Nome do banco na URL JDBC |
-| `SNS_TOPIC_ARN` | `arn:aws:sns:us-east-1:<account-id>:billing-dev-payment-confirmed` | Tópico onde o evento de pagamento confirmado é publicado (ARN, não nome, para a lib não chamar `sns:CreateTopic`) |
-| `SQS_PROCESSING_NAME` | `billing-dev-payment-processing` | Fila do consumidor de processamento |
-| `SQS_RECEIPT_NAME` | `billing-dev-payment-receipt` | Fila do consumidor de recibo |
+O `spring-boot:run` **não** lê o `.env`. A única variável que a aplicação exige no shell é `POSTGRES_DB` (nome do banco na URL JDBC, sem valor padrão). O resto da configuração vem do Secrets Manager e do Parameter Store.
 
 ### 2. Subir o banco de dados
 
@@ -128,5 +130,5 @@ src/main/java/com/godoy/billing/
 - [x] Tratamento global de exceções
 - [x] Controllers REST
 - [x] Testes unitários
-- [x] Integração AWS: Secrets Manager, SES, SQS, SNS
+- [x] Integração AWS: Secrets Manager, Parameter Store, SES, SQS, SNS
 - [ ] Integração AWS: Parameter Store, CloudWatch
