@@ -3,7 +3,9 @@ spring:
     name: billing
 
   config:
-    import: aws-secretsmanager:billing/dev/db-credentials?prefix=db.;billing/dev/jwt-secret
+    import:
+      - "aws-secretsmanager:billing/dev/db-credentials?prefix=db.;billing/dev/jwt-secret"
+      - "aws-parameterstore:/billing/dev/"
 
   datasource:
     url: jdbc:postgresql://localhost:5432/${POSTGRES_DB}
@@ -34,14 +36,3 @@ spring:
 jwt:
   secret: ${jwt-secret}
   expiration-ms: 3600000
-
-notification:
-  mail:
-    from: guilherme0510g@gmail.com
-
-aws:
-  sqs:
-    payment-processing-queue-name: ${SQS_PROCESSING_NAME}
-    payment-receipt-queue-name: ${SQS_RECEIPT_NAME}
-  sns:
-    payment-confirmed-topic-arn: ${SNS_TOPIC_ARN}
